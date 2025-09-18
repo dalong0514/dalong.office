@@ -16,6 +16,7 @@ public static class ExtractWordContentData
     private const string SourceFileName = "OriginWord.docx";
     private const string OutputFileName = "ExtractWordContentData.json";
     private static readonly string[] LineSeparators = new[] { "\r\n", "\n", "\r" };
+    private static readonly XNamespace WordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
     public static void Generate()
     {
@@ -37,34 +38,15 @@ public static class ExtractWordContentData
 
         using var entryStream = entry.Open();
         var document = XDocument.Load(entryStream);
-        var wordNamespace = (XNamespace)"http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-        var body = document.Root?.Element(wordNamespace + "body")
+        var body = document.Root?.Element(WordNamespace + "body")
                    ?? throw new InvalidDataException("Word document is missing the body element.");
 
         var uniqueContents = new HashSet<string>(StringComparer.Ordinal);
         var results = new List<ExtractedEntry>();
 
-        foreach (var paragraph in body.Elements(wordNamespace + "p"))
+        foreach (var paragraph in body.Descendants(WordNamespace + "p"))
         {
-            var builder = new StringBuilder();
-
-            foreach (var node in paragraph.Descendants())
-            {
-                if (node.Name == wordNamespace + "t")
-                {
-                    builder.Append(node.Value);
-                }
-                else if (node.Name == wordNamespace + "tab")
-                {
-                    builder.Append('\t');
-                }
-                else if (node.Name == wordNamespace + "br" || node.Name == wordNamespace + "cr")
-                {
-                    builder.Append('\n');
-                }
-            }
-
-            var paragraphText = builder.ToString();
+            var paragraphText = ExtractParagraphText(paragraph);
             if (paragraphText.Length == 0)
             {
                 continue;
@@ -109,6 +91,29 @@ public static class ExtractWordContentData
         var outputPath = Path.Combine(dataDirectory, OutputFileName);
         var json = JsonSerializer.Serialize(results, options);
         File.WriteAllText(outputPath, json);
+    }
+
+    private static string ExtractParagraphText(XElement paragraph)
+    {
+        var builder = new StringBuilder();
+
+        foreach (var node in paragraph.Descendants())
+        {
+            if (node.Name == WordNamespace + "t" || node.Name == WordNamespace + "delText" || node.Name == WordNamespace + "instrText")
+            {
+                builder.Append(node.Value);
+            }
+            else if (node.Name == WordNamespace + "tab")
+            {
+                builder.Append('\t');
+            }
+            else if (node.Name == WordNamespace + "br" || node.Name == WordNamespace + "cr")
+            {
+                builder.Append('\n');
+            }
+        }
+
+        return builder.ToString();
     }
 
     private sealed record ExtractedEntry(string OriginContent, string TranlastedContent);
