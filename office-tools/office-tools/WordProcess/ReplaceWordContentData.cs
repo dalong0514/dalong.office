@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -71,10 +72,30 @@ public static class ReplaceWordContentData
             }
 
             var segments = textElements.Select(e => new TextSegment(e)).ToList();
+            var combined = CombineSegments(segments);
+            if (combined.Length == 0)
+            {
+                continue;
+            }
+
+            var updated = combined;
             foreach (var translation in translations)
             {
-                ReplaceInSegments(segments, translation);
+                if (string.IsNullOrEmpty(translation.OriginContent))
+                {
+                    continue;
+                }
+
+                if (!updated.Contains(translation.OriginContent, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var replacement = translation.TranlastedContent ?? string.Empty;
+                updated = updated.Replace(translation.OriginContent, replacement, StringComparison.Ordinal);
             }
+
+            DistributeTextAcrossSegments(segments, updated);
 
             foreach (var segment in segments)
             {
@@ -118,84 +139,6 @@ public static class ReplaceWordContentData
         return entries;
     }
 
-    private static void ReplaceInSegments(List<TextSegment> segments, TranslationEntry translation)
-    {
-        var target = translation.OriginContent;
-        if (target.Length == 0)
-        {
-            return;
-        }
-
-        var replacement = translation.TranlastedContent ?? string.Empty;
-
-        while (true)
-        {
-            RecalculateStarts(segments);
-            var combined = CombineSegments(segments);
-            var index = combined.IndexOf(target, StringComparison.Ordinal);
-            if (index < 0)
-            {
-                break;
-            }
-
-            ApplyReplacement(segments, index, target.Length, replacement);
-        }
-    }
-
-    private static void ApplyReplacement(List<TextSegment> segments, int matchStart, int matchLength, string replacement)
-    {
-        RecalculateStarts(segments);
-        var matchEnd = matchStart + matchLength;
-
-        var startSegmentIndex = FindSegmentIndex(segments, matchStart);
-        var endSegmentIndex = FindSegmentIndex(segments, matchEnd - 1);
-        if (startSegmentIndex < 0 || endSegmentIndex < 0)
-        {
-            return;
-        }
-
-        var startSegment = segments[startSegmentIndex];
-        var endSegment = segments[endSegmentIndex];
-
-        var startOffset = matchStart - startSegment.Start;
-        var endOffset = matchEnd - endSegment.Start;
-
-        var prefix = startOffset > 0 ? startSegment.Text[..startOffset] : string.Empty;
-        var suffix = endOffset < endSegment.Text.Length ? endSegment.Text[endOffset..] : string.Empty;
-
-        startSegment.Text = prefix + replacement + suffix;
-
-        for (var i = startSegmentIndex + 1; i <= endSegmentIndex; i++)
-        {
-            segments[i].Text = string.Empty;
-        }
-    }
-
-    private static void RecalculateStarts(List<TextSegment> segments)
-    {
-        var offset = 0;
-        foreach (var segment in segments)
-        {
-            segment.Start = offset;
-            offset += segment.Text.Length;
-        }
-    }
-
-    private static int FindSegmentIndex(List<TextSegment> segments, int position)
-    {
-        for (var i = 0; i < segments.Count; i++)
-        {
-            var segment = segments[i];
-            var endExclusive = segment.Start + segment.Text.Length;
-            if (position < endExclusive)
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
     private static string CombineSegments(List<TextSegment> segments)
     {
         if (segments.Count == 1)
@@ -203,13 +146,35 @@ public static class ReplaceWordContentData
             return segments[0].Text;
         }
 
-        var builder = new System.Text.StringBuilder();
+        var builder = new StringBuilder();
         foreach (var segment in segments)
         {
             builder.Append(segment.Text);
         }
 
         return builder.ToString();
+    }
+
+    private static void DistributeTextAcrossSegments(List<TextSegment> segments, string text)
+    {
+        var offset = 0;
+        for (var i = 0; i < segments.Count; i++)
+        {
+            var segment = segments[i];
+            var remaining = text.Length - offset;
+            if (remaining <= 0)
+            {
+                segment.Text = string.Empty;
+                continue;
+            }
+
+            var take = i == segments.Count - 1
+                ? remaining
+                : Math.Min(remaining, segment.OriginalLength);
+
+            segment.Text = take > 0 ? text.Substring(offset, take) : string.Empty;
+            offset += take;
+        }
     }
 
     private sealed record TranslationEntry(
@@ -222,10 +187,11 @@ public static class ReplaceWordContentData
         {
             Element = element;
             Text = element.Value;
+            OriginalLength = Text.Length;
         }
 
         public XElement Element { get; }
         public string Text { get; set; }
-        public int Start { get; set; }
+        public int OriginalLength { get; }
     }
 }
