@@ -23,7 +23,7 @@ public static class ExtractContentData
             throw new FileNotFoundException($"Word document not found at {documentPath}");
         }
 
-        var targetPath = outputPath ?? Path.Combine(projectRoot, "WordProcess", "ExtractContentData.json");
+        var targetPath = outputPath ?? Path.Combine(projectRoot, "Data", "ExtractContentData.json");
         Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
 
         var lines = ExtractLines(documentPath);
@@ -45,27 +45,61 @@ public static class ExtractContentData
 
     private static List<string> ExtractLines(string documentPath)
     {
-        var lines = new List<string>();
+        using var fileStream = new FileStream(documentPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var archive = new ZipArchive(fileStream, ZipArchiveMode.Read, leaveOpen: false);
 
-        using var archive = ZipFile.OpenRead(documentPath);
         var relevantEntries = archive.Entries
             .Where(IsRelevantWordEntry)
             .OrderBy(entry => entry.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        var lines = new List<string>();
+
         foreach (var entry in relevantEntries)
         {
             using var stream = entry.Open();
             var document = XDocument.Load(stream);
-
-            foreach (var paragraph in document.Descendants(WordNamespace + "p"))
+            var root = document.Root;
+            if (root is null)
             {
-                var paragraphText = GetParagraphText(paragraph);
-                AppendNormalizedLines(paragraphText, lines);
+                continue;
             }
+
+            ExtractFromContainer(root, lines);
         }
 
         return lines;
+    }
+
+    private static void ExtractFromContainer(XElement container, ICollection<string> lines)
+    {
+        foreach (var element in container.Elements())
+        {
+            if (element.Name == WordNamespace + "p")
+            {
+                AppendNormalizedLines(GetParagraphText(element), lines);
+                continue;
+            }
+
+            if (element.Name == WordNamespace + "tbl")
+            {
+                ExtractTable(element, lines);
+                continue;
+            }
+
+            ExtractFromContainer(element, lines);
+        }
+    }
+
+    private static void ExtractTable(XElement table, ICollection<string> lines)
+    {
+        foreach (var row in table.Elements(WordNamespace + "tr"))
+        {
+            foreach (var cell in row.Elements(WordNamespace + "tc"))
+            {
+                ExtractFromContainer(cell, lines);
+            }
+        }
     }
 
     private static string GetParagraphText(XElement paragraph)
