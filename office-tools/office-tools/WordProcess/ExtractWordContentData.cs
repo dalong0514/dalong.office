@@ -19,6 +19,9 @@ public static class ExtractWordContentData
     private static readonly string[] LineSeparators = new[] { "\r\n", "\n", "\r" };
     private static readonly XNamespace WordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
+    /// <summary>
+    /// Builds a JSON dataset of unique segments sorted by their original length.
+    /// </summary>
     public static void Generate()
     {
         var projectRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
@@ -88,6 +91,9 @@ public static class ExtractWordContentData
         File.WriteAllText(outputPath, json);
     }
 
+    /// <summary>
+    /// Extracts plain text from a paragraph node while preserving tabs and breaks.
+    /// </summary>
     private static string ExtractParagraphText(XElement paragraph)
     {
         var builder = new StringBuilder();
@@ -111,6 +117,9 @@ public static class ExtractWordContentData
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Detects whether the text contains only ASCII letters, digits, and symbols.
+    /// </summary>
     private static bool IsPureEnglishContent(string text)
     {
         var hasLetterOrDigit = false;

@@ -19,6 +19,9 @@ public static class ReplaceWordContentData
     private const string SourceWordFileName = "OriginWord.docx";
     private const string OutputWordFileName = "TranslatedWord.docx";
 
+    /// <summary>
+    /// Applies translated content to the source Word document and saves a new file.
+    /// </summary>
     public static void Generate()
     {
         var projectRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
@@ -112,6 +115,9 @@ public static class ReplaceWordContentData
         }
     }
 
+    /// <summary>
+    /// Loads translation entries from JSON and sorts them by original length.
+    /// </summary>
     private static List<TranslationEntry> ReadTranslations(string jsonPath)
     {
         var json = File.ReadAllText(jsonPath);
@@ -139,6 +145,9 @@ public static class ReplaceWordContentData
         return entries;
     }
 
+    /// <summary>
+    /// Creates a contiguous string from the ordered text segments of a paragraph.
+    /// </summary>
     private static string CombineSegments(List<TextSegment> segments)
     {
         if (segments.Count == 1)
@@ -155,6 +164,9 @@ public static class ReplaceWordContentData
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Writes the updated text back into the original segment boundaries.
+    /// </summary>
     private static void DistributeTextAcrossSegments(List<TextSegment> segments, string text)
     {
         var offset = 0;
@@ -177,10 +189,18 @@ public static class ReplaceWordContentData
         }
     }
 
+    /// <summary>
+    /// Represents a translation entry with original and translated content.
+    /// </summary>
+    /// <param name="OriginContent"></param>
+    /// <param name="TranlastedContent"></param>
     private sealed record TranslationEntry(
         [property: JsonPropertyName("originContent")] string OriginContent,
         [property: JsonPropertyName("tranlastedContent")] string? TranlastedContent);
 
+    /// <summary>
+    /// Represents a text segment within a paragraph, tracking its original length.
+    /// </summary>
     private sealed class TextSegment
     {
         public TextSegment(XElement element)
