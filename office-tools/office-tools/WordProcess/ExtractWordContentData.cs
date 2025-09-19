@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -70,16 +71,10 @@ public static class ExtractWordContentData
             }
         }
 
-        results.Sort(static (left, right) =>
-        {
-            var lengthComparison = right.OriginContent.Length.CompareTo(left.OriginContent.Length);
-            if (lengthComparison != 0)
-            {
-                return lengthComparison;
-            }
-
-            return string.CompareOrdinal(left.OriginContent, right.OriginContent);
-        });
+        var orderedResults = results
+            .OrderByDescending(entry => entry.OriginContent.Length)
+            .ThenBy(entry => entry.OriginContent, StringComparer.Ordinal)
+            .ToList();
 
         var options = new JsonSerializerOptions
         {
@@ -89,7 +84,7 @@ public static class ExtractWordContentData
         };
 
         var outputPath = Path.Combine(dataDirectory, OutputFileName);
-        var json = JsonSerializer.Serialize(results, options);
+        var json = JsonSerializer.Serialize(orderedResults, options);
         File.WriteAllText(outputPath, json);
     }
 
