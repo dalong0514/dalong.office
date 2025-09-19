@@ -56,7 +56,7 @@ public static class ExtractWordContentData
             foreach (var segment in segments)
             {
                 var content = segment.Trim();
-                if (content.Length == 0)
+                if (content.Length == 0 || IsPureEnglishContent(content))
                 {
                     continue;
                 }
@@ -114,6 +114,34 @@ public static class ExtractWordContentData
         }
 
         return builder.ToString();
+    }
+
+    private static bool IsPureEnglishContent(string text)
+    {
+        var hasLetterOrDigit = false;
+
+        foreach (var ch in text)
+        {
+            if (ch > 127)
+            {
+                return false;
+            }
+
+            if (char.IsLetterOrDigit(ch))
+            {
+                hasLetterOrDigit = true;
+                continue;
+            }
+
+            if (char.IsWhiteSpace(ch) || char.IsPunctuation(ch) || char.IsSymbol(ch))
+            {
+                continue;
+            }
+
+            return false;
+        }
+
+        return hasLetterOrDigit;
     }
 
     private sealed record ExtractedEntry(string OriginContent, string TranlastedContent);
